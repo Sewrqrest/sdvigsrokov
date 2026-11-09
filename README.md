@@ -1,2 +1,767 @@
-# sdvigsrokov
-Быстрое отслеживание изменений срока проекта
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShiftMaster TRACKER PRO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-700 antialiased min-h-screen p-4 sm:p-6">
+
+    <div class="max-w-7xl mx-auto space-y-6">
+
+        <!-- TOP BAR: DATABASE & UTILS -->
+        <div class="flex justify-between items-center text-xs text-slate-500 bg-white px-4 py-2.5 rounded-xl border border-slate-200/80 shadow-sm">
+            <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="font-medium text-slate-600">База данных сохраняется в браузере / SSD</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <!-- Экспорт -->
+                <button onclick="db.export()" class="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-medium px-3 py-1.5 rounded-lg border border-emerald-200 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-download"></i> Экспорт БД (JSON)
+                </button>
+                <!-- Импорт -->
+                <label class="bg-amber-50 hover:bg-amber-100 text-amber-700 font-medium px-3 py-1.5 rounded-lg border border-amber-200 transition flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-upload"></i> Импорт БД (JSON)
+                    <input type="file" accept=".json" class="hidden" onchange="db.import(event)">
+                </label>
+            </div>
+        </div>
+
+        <!-- 3 STATS CARDS -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Card 1: Shift Mode -->
+            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                <div>
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="text-[11px] font-bold text-slate-400 tracking-wider uppercase">УЧЕТ ДНЕЙ ДЛЯ СДВИГОВ</span>
+                        <i class="fa-solid fa-calculator text-blue-500"></i>
+                    </div>
+                    <div class="bg-slate-100 p-1 rounded-xl flex gap-1 text-xs font-semibold">
+                        <button id="btnModeWork" onclick="app.setMode('work')" class="flex-1 py-1.5 px-3 rounded-lg bg-white text-blue-600 shadow-sm flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-briefcase"></i> Рабочие дни РФ
+                        </button>
+                        <button id="btnModeCal" onclick="app.setMode('cal')" class="flex-1 py-1.5 px-3 rounded-lg text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-calendar"></i> Календарные
+                        </button>
+                    </div>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-3">Исключает СБ/ВС и праздники РФ при перерасчетах.</p>
+            </div>
+
+            <!-- Card 2: General Stats -->
+            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex justify-between items-start">
+                <div>
+                    <span class="text-[11px] font-bold text-slate-400 tracking-wider uppercase block mb-2">ОБЩАЯ СТАТИСТИКА</span>
+                    <div class="flex items-baseline gap-2">
+                        <span class="text-3xl font-black text-slate-900" id="statProjects">0</span>
+                        <span class="text-xs text-slate-400 mr-2">проектов</span>
+                        <span class="text-3xl font-black text-slate-900" id="statStages">0</span>
+                        <span class="text-xs text-slate-400">этапов</span>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-3">Всего сдвинутых этапов: <b id="statShifts" class="text-amber-600">0</b></p>
+                </div>
+                <div class="bg-emerald-50 text-emerald-500 p-2.5 rounded-xl text-lg">
+                    <i class="fa-solid fa-chart-pie"></i>
+                </div>
+            </div>
+
+            <!-- Card 3: Holidays -->
+            <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-[11px] font-bold text-slate-400 tracking-wider uppercase">КАЛЕНДАРЬ НЕРАБОЧИХ ДНЕЙ</span>
+                        <span class="bg-rose-100 text-rose-600 text-[10px] font-bold px-2 py-0.5 rounded-md">2025–2028</span>
+                    </div>
+                    <p class="text-xs text-slate-600 mt-2">Праздников в базе: <b id="statHolidaysCount" class="text-slate-900">0 дн.</b></p>
+                </div>
+                <button onclick="app.openCalendarModal()" class="text-xs text-blue-600 font-semibold hover:underline flex items-center gap-1 mt-3">
+                    <i class="fa-solid fa-gear"></i> Настроить праздники на 2027, 2028+ гг.
+                </button>
+            </div>
+        </div>
+
+        <!-- VIEW: PROJECTS LIST -->
+        <div id="viewProjectsList" class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm hidden space-y-4">
+            <div class="flex justify-between items-center">
+                <h2 class="text-base font-bold text-slate-800">Список всех проектов</h2>
+                <button onclick="app.openProjectModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-semibold transition">
+                    + Новый проект
+                </button>
+            </div>
+            <div id="projectsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        </div>
+
+        <!-- VIEW: SINGLE PROJECT DETAIL -->
+        <div id="viewProjectDetail" class="space-y-6">
+            
+            <!-- PROJECT HEADER BAR -->
+            <div class="bg-white p-4 px-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div class="flex items-center gap-4">
+                    <button onclick="app.showHome()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3.5 py-2 rounded-xl transition flex items-center gap-2">
+                        <i class="fa-solid fa-arrow-left"></i> Все проекты
+                    </button>
+                    <span class="text-slate-300">/</span>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h2 id="projectTitle" class="text-lg font-bold text-slate-900">...</h2>
+                            <button onclick="app.editCurrentProjectTitle()" class="text-slate-400 hover:text-slate-600 text-xs"><i class="fa-solid fa-pen"></i></button>
+                        </div>
+                        <p id="projectDesc" class="text-xs text-slate-400">...</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="app.openStageModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition shadow-sm flex items-center gap-2">
+                        <i class="fa-solid fa-plus"></i> Добавить этап
+                    </button>
+                    <button onclick="app.deleteCurrentProject()" title="Удалить проект полностью" class="bg-rose-50 hover:bg-rose-100 text-rose-600 p-2.5 rounded-xl text-xs font-semibold transition flex items-center gap-1">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- TABS -->
+            <div class="border-b border-slate-200 flex items-center gap-8 text-xs font-semibold text-slate-500">
+                <button id="tabBtnStages" onclick="app.switchTab('stages')" class="pb-3 border-b-2 border-blue-600 text-blue-600 flex items-center gap-2">
+                    <i class="fa-solid fa-bars-staggered"></i> Этапы и Сдвиги
+                </button>
+                <button id="tabBtnGantt" onclick="app.switchTab('gantt')" class="pb-3 hover:text-slate-800 flex items-center gap-2 border-b-2 border-transparent">
+                    <i class="fa-solid fa-chart-gantt"></i> Гант / Таймлайн
+                </button>
+                <button id="tabBtnHistory" onclick="app.switchTab('history')" class="pb-3 hover:text-slate-800 flex items-center gap-2 border-b-2 border-transparent">
+                    <i class="fa-solid fa-rotate-left"></i> История сдвигов <span id="historyBadge" class="bg-slate-200 text-slate-700 px-2 py-0.5 rounded-full text-[10px]">0</span>
+                </button>
+            </div>
+
+            <!-- TAB CONTENT 1: STAGES TABLE -->
+            <div id="tabContentStages" class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50/50 border-b border-slate-200/80">
+                                <th class="py-3.5 px-4 w-12 text-center">#</th>
+                                <th class="py-3.5 px-4">ЭТАП / ЗАДАЧА</th>
+                                <th class="py-3.5 px-4">ОТВЕТСТВЕННЫЙ</th>
+                                <th class="py-3.5 px-4">ЗАВИСИТ ОТ</th>
+                                <th class="py-3.5 px-4">ПЛАН</th>
+                                <th class="py-3.5 px-4">АКТУАЛЬНЫЙ ДЕДЛАЙН</th>
+                                <th class="py-3.5 px-4">БЫСТРЫЙ СДВИГ</th>
+                                <th class="py-3.5 px-4 text-right">ДЕЙСТВИЯ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stagesTableBody" class="divide-y divide-slate-100 text-xs text-slate-700"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB CONTENT 2: GANTT CHART -->
+            <div id="tabContentGantt" class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm hidden space-y-4">
+                <h3 class="text-sm font-bold text-slate-800">Визуализация сроков этапов</h3>
+                <div id="ganttContainer" class="space-y-4 overflow-x-auto"></div>
+            </div>
+
+            <!-- TAB CONTENT 3: SHIFT HISTORY -->
+            <div id="tabContentHistory" class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm hidden space-y-4">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-sm font-bold text-slate-800">Лог всех изменений дедлайнов</h3>
+                    <button onclick="app.clearHistory()" class="text-xs text-rose-500 hover:underline">Очистить историю</button>
+                </div>
+                <div id="historyContainer" class="space-y-2"></div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- MODAL: DELETE CONFIRMATION (Built-in for Google Sites) -->
+    <div id="modalDeleteProject" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4 text-center">
+            <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto text-xl">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <div>
+                <h3 class="text-base font-bold text-slate-800">Удалить проект?</h3>
+                <p class="text-xs text-slate-500 mt-1">Это действие нельзя отменить. Все этапы проекта будут удалены.</p>
+            </div>
+            <div class="flex justify-center gap-2 pt-2">
+                <button type="button" onclick="app.closeModals()" class="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl flex-1">Отмена</button>
+                <button type="button" onclick="app.confirmDeleteProject()" class="px-4 py-2 text-xs font-bold bg-rose-600 text-white hover:bg-rose-700 rounded-xl flex-1">Удалить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: PROJECT FORM -->
+    <div id="modalProject" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h3 class="text-base font-bold text-slate-800">Проект</h3>
+            <form onsubmit="app.saveProject(event)">
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Название проекта</label>
+                        <input type="text" id="projectTitleInput" required class="w-full border border-slate-300 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Описание</label>
+                        <input type="text" id="projectDescInput" class="w-full border border-slate-300 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 mt-5">
+                    <button type="button" onclick="app.closeModals()" class="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl">Отмена</button>
+                    <button type="submit" class="px-4 py-2 text-xs font-bold bg-blue-600 text-white rounded-xl hover:bg-blue-700">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: STAGE FORM -->
+    <div id="modalStage" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h3 class="text-base font-bold text-slate-800" id="stageModalTitle">Новый этап</h3>
+            <form onsubmit="app.saveStage(event)">
+                <input type="hidden" id="stageEditId">
+                <div class="space-y-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Название этапа / задачи</label>
+                        <input type="text" id="stageTitleInput" required class="w-full border border-slate-300 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Ответственный</label>
+                        <input type="text" id="stageAssigneeInput" placeholder="например, Клиент, Дизайнер" class="w-full border border-slate-300 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Дедлайн (План)</label>
+                        <input type="date" id="stageDateInput" required class="w-full border border-slate-300 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Зависит от</label>
+                        <select id="stageParentInput" class="w-full border border-slate-300 rounded-xl px-3.5 py-2 text-xs focus:ring-2 focus:ring-blue-500 outline-none">
+                            <option value="">—</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 mt-5">
+                    <button type="button" onclick="app.closeModals()" class="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl">Отмена</button>
+                    <button type="submit" class="px-4 py-2 text-xs font-bold bg-blue-600 text-white rounded-xl hover:bg-blue-700">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: CALENDAR -->
+    <div id="modalCalendar" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-4 max-h-[85vh] flex flex-col">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="text-base font-bold text-slate-800">Производственный календарь РФ</h3>
+                <button onclick="app.closeModals()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="flex gap-2">
+                <input type="date" id="newHolidayInput" class="border border-slate-300 rounded-xl px-3 py-1.5 text-xs flex-grow">
+                <button onclick="app.addHoliday()" class="bg-blue-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-blue-700">+ Добавить праздник</button>
+            </div>
+            <div class="overflow-y-auto flex-grow max-h-60 border border-slate-100 rounded-xl p-2 space-y-1" id="holidaysList"></div>
+            <div class="flex justify-end pt-2 border-t">
+                <button onclick="app.closeModals()" class="px-4 py-2 text-xs font-bold bg-blue-600 text-white rounded-xl">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const DEFAULT_HOLIDAYS = [
+            "2025-01-01","2025-01-02","2025-01-03","2025-01-06","2025-01-07","2025-01-08","2025-02-23","2025-03-08","2025-05-01","2025-05-09","2025-06-12","2025-11-04",
+            "2026-01-01","2026-01-02","2026-01-05","2026-01-06","2026-01-07","2026-01-08","2026-02-23","2026-03-09","2026-05-01","2026-05-09","2026-06-12","2026-11-04",
+            "2027-01-01","2027-01-07","2027-02-23","2027-03-08","2027-05-01","2027-05-09","2027-06-12","2027-11-04"
+        ];
+
+        let state = {
+            mode: 'work',
+            projects: [],
+            holidays: [...DEFAULT_HOLIDAYS],
+            history: [],
+            currentProjectId: null,
+            activeTab: 'stages'
+        };
+
+        function loadDefaultDemo() {
+            state.projects = [
+                {
+                    id: 'p_demo',
+                    title: 'Ребрендинг сайта Клиента А',
+                    desc: 'Разработка новой айдентики, верстка и интеграция',
+                    stages: [
+                        { id: 's1', title: 'Предоставление обратной связи по концепту (Клиент)', assignee: 'Клиент', parentId: null, planDate: '2026-11-03', actualDate: '2026-11-03' },
+                        { id: 's2', title: 'Финальная отрисовка UI макетов', assignee: 'Дизайнер', parentId: 's1', planDate: '2026-11-06', actualDate: '2026-11-06' },
+                        { id: 's3', title: 'Верстка и интеграция', assignee: 'Разработчики', parentId: 's2', planDate: '2026-11-11', actualDate: '2026-11-11' }
+                    ]
+                }
+            ];
+            state.history = [];
+            state.currentProjectId = 'p_demo';
+        }
+
+        function loadState() {
+            const saved = localStorage.getItem('shiftmaster_exact_db');
+            if (saved) {
+                try { state = JSON.parse(saved); } catch(e) {}
+            } else {
+                loadDefaultDemo();
+            }
+            if(!state.projects || state.projects.length === 0) loadDefaultDemo();
+            if(!state.history) state.history = [];
+        }
+
+        function saveState() {
+            localStorage.setItem('shiftmaster_exact_db', JSON.stringify(state));
+            app.render();
+        }
+
+        const db = {
+            export: function() {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state, null, 2));
+                const a = document.createElement('a');
+                a.setAttribute("href", dataStr);
+                a.setAttribute("download", `shiftmaster_${new Date().toISOString().slice(0,10)}.json`);
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            },
+            import: function(e) {
+                const file = e.target.files[0];
+                if(!file) return;
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    try {
+                        const imported = JSON.parse(evt.target.result);
+                        if(imported && Array.isArray(imported.projects)) {
+                            state = imported;
+                            saveState();
+                            alert("База данных успешно загружена!");
+                        }
+                    } catch(err) { alert("Ошибка при чтении файла JSON!"); }
+                };
+                reader.readAsText(file);
+            }
+        };
+
+        function formatDate(dateStr) {
+            if(!dateStr) return '';
+            const parts = dateStr.split('-');
+            if(parts.length !== 3) return dateStr;
+            return `${parts[2]}.${parts[1]}.${parts[0]}`;
+        }
+
+        function isWorkDay(dateObj) {
+            const day = dateObj.getDay();
+            if (day === 0 || day === 6) return false;
+            const formatted = dateObj.toISOString().slice(0,10);
+            if (state.holidays.includes(formatted)) return false;
+            return true;
+        }
+
+        function addDays(startDateStr, days, useWorkDays = true) {
+            let current = new Date(startDateStr);
+            if (!useWorkDays) {
+                current.setDate(current.getDate() + days);
+                return current.toISOString().slice(0,10);
+            }
+            let added = 0;
+            const dir = days >= 0 ? 1 : -1;
+            const target = Math.abs(days);
+
+            while (added < target) {
+                current.setDate(current.getDate() + dir);
+                if (isWorkDay(current)) added++;
+            }
+            return current.toISOString().slice(0,10);
+        }
+
+        const app = {
+            init: function() {
+                loadState();
+                this.render();
+            },
+            setMode: function(m) {
+                state.mode = m;
+                const btnW = document.getElementById('btnModeWork');
+                const btnC = document.getElementById('btnModeCal');
+                if(m === 'work') {
+                    btnW.className = "flex-1 py-1.5 px-3 rounded-lg bg-white text-blue-600 shadow-sm flex items-center justify-center gap-1.5 transition";
+                    btnC.className = "flex-1 py-1.5 px-3 rounded-lg text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1.5 transition";
+                } else {
+                    btnC.className = "flex-1 py-1.5 px-3 rounded-lg bg-white text-blue-600 shadow-sm flex items-center justify-center gap-1.5 transition";
+                    btnW.className = "flex-1 py-1.5 px-3 rounded-lg text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1.5 transition";
+                }
+                saveState();
+            },
+            showHome: function() {
+                state.currentProjectId = null;
+                this.render();
+            },
+            switchTab: function(tabName) {
+                state.activeTab = tabName;
+                const tabs = ['stages', 'gantt', 'history'];
+                tabs.forEach(t => {
+                    const btn = document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1));
+                    const content = document.getElementById('tabContent' + t.charAt(0).toUpperCase() + t.slice(1));
+                    if(t === tabName) {
+                        btn.className = "pb-3 border-b-2 border-blue-600 text-blue-600 flex items-center gap-2";
+                        content.classList.remove('hidden');
+                    } else {
+                        btn.className = "pb-3 hover:text-slate-800 flex items-center gap-2 border-b-2 border-transparent";
+                        content.classList.add('hidden');
+                    }
+                });
+                if(tabName === 'gantt') this.renderGantt();
+                if(tabName === 'history') this.renderHistory();
+            },
+            render: function() {
+                let totalStages = 0;
+                let totalShifts = 0;
+                state.projects.forEach(p => {
+                    totalStages += (p.stages || []).length;
+                    (p.stages || []).forEach(s => {
+                        if(s.actualDate !== s.planDate) totalShifts++;
+                    });
+                });
+
+                document.getElementById('statProjects').innerText = state.projects.length;
+                document.getElementById('statStages').innerText = totalStages;
+                document.getElementById('statShifts').innerText = totalShifts;
+                document.getElementById('statHolidaysCount').innerText = `${state.holidays.length} дн.`;
+                document.getElementById('historyBadge').innerText = (state.history || []).length;
+
+                if(state.currentProjectId) {
+                    document.getElementById('viewProjectsList').classList.add('hidden');
+                    document.getElementById('viewProjectDetail').classList.remove('hidden');
+                    this.renderProjectDetail();
+                } else {
+                    document.getElementById('viewProjectsList').classList.remove('hidden');
+                    document.getElementById('viewProjectDetail').classList.add('hidden');
+                    this.renderProjectsGrid();
+                }
+            },
+            renderProjectsGrid: function() {
+                const grid = document.getElementById('projectsGrid');
+                grid.innerHTML = '';
+                state.projects.forEach(p => {
+                    const card = document.createElement('div');
+                    card.className = "bg-white p-4 rounded-2xl border border-slate-200/80 hover:border-blue-400 cursor-pointer transition shadow-sm";
+                    card.onclick = () => { state.currentProjectId = p.id; app.render(); };
+                    card.innerHTML = `
+                        <span class="text-[10px] font-bold text-blue-600 uppercase">Проект</span>
+                        <h3 class="font-bold text-slate-800 text-sm mt-0.5">${p.title}</h3>
+                        <p class="text-xs text-slate-400 mt-1">${p.desc || ''}</p>
+                        <div class="mt-4 pt-3 border-t text-xs text-slate-500 flex justify-between">
+                            <span>Этапов: ${(p.stages||[]).length}</span>
+                            <span class="text-blue-600 font-semibold">Открыть &rarr;</span>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            },
+            renderProjectDetail: function() {
+                const project = state.projects.find(p => p.id === state.currentProjectId);
+                if(!project) return this.showHome();
+
+                document.getElementById('projectTitle').innerText = project.title;
+                document.getElementById('projectDesc').innerText = project.desc || '';
+
+                const tbody = document.getElementById('stagesTableBody');
+                tbody.innerHTML = '';
+
+                if(!project.stages || project.stages.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-slate-400">Нет этапов. Нажмите «Добавить этап».</td></tr>`;
+                    return;
+                }
+
+                project.stages.forEach((s, idx) => {
+                    const parent = project.stages.find(item => item.id === s.parentId);
+                    const isShifted = s.actualDate !== s.planDate;
+
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-slate-50/60 transition";
+                    tr.innerHTML = `
+                        <td class="py-3.5 px-4 text-center font-medium text-slate-400">${idx + 1}</td>
+                        <td class="py-3.5 px-4 font-bold text-slate-800">${s.title}</td>
+                        <td class="py-3.5 px-4">
+                            ${s.assignee ? `<span class="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md text-[11px] font-medium">${s.assignee}</span>` : '—'}
+                        </td>
+                        <td class="py-3.5 px-4">
+                            ${parent ? `<span class="text-blue-600 font-medium flex items-center gap-1"><i class="fa-solid fa-turn-up rotate-90 text-[10px]"></i> ${parent.title}</span>` : '<span class="text-slate-300">—</span>'}
+                        </td>
+                        <td class="py-3.5 px-4 font-medium ${isShifted ? 'line-through text-slate-400' : 'text-slate-500'}">${formatDate(s.planDate)}</td>
+                        <td class="py-3.5 px-4 font-extrabold ${isShifted ? 'text-amber-600' : 'text-slate-900'}">${formatDate(s.actualDate)}</td>
+                        <td class="py-3.5 px-4">
+                            <div class="flex items-center gap-1">
+                                <button onclick="app.shiftStage('${s.id}', 1)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2 py-1 rounded-md text-[11px] transition">+1д</button>
+                                <button onclick="app.shiftStage('${s.id}', 2)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2 py-1 rounded-md text-[11px] transition">+2д</button>
+                                <button onclick="app.shiftStage('${s.id}', 3)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2 py-1 rounded-md text-[11px] transition">+3д</button>
+                                <button onclick="app.shiftStage('${s.id}', 5)" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2 py-1 rounded-md text-[11px] transition">+5д</button>
+                                <button onclick="app.promptShift('${s.id}')" title="Сдвинуть на любое число дней (включая отрицательные)" class="bg-slate-100 hover:bg-blue-100 hover:text-blue-600 text-slate-600 font-bold px-2 py-1 rounded-md text-[11px] transition">...</button>
+                            </div>
+                        </td>
+                        <td class="py-3.5 px-4 text-right">
+                            <div class="flex items-center justify-end gap-2 text-slate-400">
+                                <button onclick="app.editStage('${s.id}')" class="hover:text-blue-600 p-1"><i class="fa-solid fa-pen"></i></button>
+                                <button onclick="app.deleteStage('${s.id}')" class="hover:text-rose-600 p-1"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                this.switchTab(state.activeTab || 'stages');
+            },
+            shiftStage: function(stageId, days) {
+                const project = state.projects.find(p => p.id === state.currentProjectId);
+                if(!project) return;
+                const stage = project.stages.find(s => s.id === stageId);
+                if(!stage) return;
+
+                const useWork = state.mode === 'work';
+                const oldDate = stage.actualDate;
+                const newDate = addDays(stage.actualDate, days, useWork);
+                stage.actualDate = newDate;
+
+                state.history.unshift({
+                    id: 'h_' + Date.now(),
+                    stageId: stage.id,
+                    stageTitle: stage.title,
+                    days: days,
+                    oldDate: oldDate,
+                    newDate: newDate,
+                    timestamp: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+                });
+
+                function cascade(parentId, shiftDays) {
+                    project.stages.forEach(child => {
+                        if(child.parentId === parentId) {
+                            child.actualDate = addDays(child.actualDate, shiftDays, useWork);
+                            cascade(child.id, shiftDays);
+                        }
+                    });
+                }
+                cascade(stageId, days);
+
+                saveState();
+            },
+            promptShift: function(stageId) {
+                const input = prompt("Введите число дней для сдвига:\n• Положительное (1, 5, 10) — сдвиг вперед\n• Отрицательное (-1, -3) — откат назад");
+                if(input !== null) {
+                    const days = parseInt(input.trim(), 10);
+                    if(!isNaN(days)) this.shiftStage(stageId, days);
+                }
+            },
+            renderGantt: function() {
+                const project = state.projects.find(p => p.id === state.currentProjectId);
+                const container = document.getElementById('ganttContainer');
+                if(!project || !project.stages || project.stages.length === 0) {
+                    container.innerHTML = '<p class="text-xs text-slate-400">Нет данных для Ганта.</p>';
+                    return;
+                }
+                container.innerHTML = '';
+                project.stages.forEach(s => {
+                    const isShifted = s.actualDate !== s.planDate;
+                    const item = document.createElement('div');
+                    item.className = "p-3 bg-slate-50 rounded-xl border border-slate-200/60 space-y-2";
+                    item.innerHTML = `
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-bold text-slate-800">${s.title}</span>
+                            <span class="text-slate-500">План: ${formatDate(s.planDate)} &rarr; <b class="${isShifted ? 'text-amber-600' : 'text-slate-800'}">${formatDate(s.actualDate)}</b></span>
+                        </div>
+                        <div class="w-full bg-slate-200 h-3 rounded-full overflow-hidden flex">
+                            <div class="bg-blue-500 h-full rounded-full" style="width: 70%"></div>
+                            ${isShifted ? `<div class="bg-amber-500 h-full animate-pulse" style="width: 30%"></div>` : ''}
+                        </div>
+                    `;
+                    container.appendChild(item);
+                });
+            },
+            renderHistory: function() {
+                const container = document.getElementById('historyContainer');
+                if(!state.history || state.history.length === 0) {
+                    container.innerHTML = '<p class="text-xs text-slate-400 py-4">История сдвигов пуста.</p>';
+                    return;
+                }
+                container.innerHTML = '';
+                state.history.forEach(h => {
+                    const div = document.createElement('div');
+                    div.className = "flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs";
+                    div.innerHTML = `
+                        <div>
+                            <span class="font-bold text-slate-800">${h.stageTitle}</span>
+                            <span class="text-slate-400 ml-2">${h.timestamp}</span>
+                            <p class="text-slate-500 mt-0.5">Сдвиг на <b class="${h.days > 0 ? 'text-amber-600' : 'text-emerald-600'}">${h.days > 0 ? '+' + h.days : h.days}д</b> (с ${formatDate(h.oldDate)} до ${formatDate(h.newDate)})</p>
+                        </div>
+                        <button onclick="app.undoHistory('${h.id}')" class="bg-white hover:bg-slate-100 text-slate-600 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold shadow-sm transition">
+                            Откатить
+                        </button>
+                    `;
+                    container.appendChild(div);
+                });
+            },
+            undoHistory: function(historyId) {
+                const item = state.history.find(h => h.id === historyId);
+                if(!item) return;
+                this.shiftStage(item.stageId, -item.days);
+                state.history = state.history.filter(h => h.id !== historyId);
+                saveState();
+            },
+            clearHistory: function() {
+                if(confirm("Очистить историю сдвигов?")) {
+                    state.history = [];
+                    saveState();
+                }
+            },
+            deleteCurrentProject: function() {
+                document.getElementById('modalDeleteProject').classList.remove('hidden');
+            },
+            confirmDeleteProject: function() {
+                state.projects = state.projects.filter(p => p.id !== state.currentProjectId);
+                state.currentProjectId = null;
+                saveState();
+                this.closeModals();
+            },
+            openProjectModal: function() {
+                document.getElementById('projectTitleInput').value = '';
+                document.getElementById('projectDescInput').value = '';
+                document.getElementById('modalProject').classList.remove('hidden');
+            },
+            saveProject: function(e) {
+                e.preventDefault();
+                const title = document.getElementById('projectTitleInput').value;
+                const desc = document.getElementById('projectDescInput').value;
+                const newProj = { id: 'p_' + Date.now(), title, desc, stages: [] };
+                state.projects.push(newProj);
+                state.currentProjectId = newProj.id;
+                saveState();
+                this.closeModals();
+            },
+            editCurrentProjectTitle: function() {
+                const project = state.projects.find(p => p.id === state.currentProjectId);
+                if(!project) return;
+                const newTitle = prompt("Название проекта:", project.title);
+                if(newTitle) {
+                    project.title = newTitle;
+                    saveState();
+                }
+            },
+            openStageModal: function() {
+                const project = state.projects.find(p => p.id === state.currentProjectId);
+                if(!project) return;
+
+                document.getElementById('stageModalTitle').innerText = "Новый этап";
+                document.getElementById('stageEditId').value = '';
+                document.getElementById('stageTitleInput').value = '';
+                document.getElementById('stageAssigneeInput').value = '';
+                document.getElementById('stageDateInput').value = new Date().toISOString().slice(0,10);
+
+                const select = document.getElementById('stageParentInput');
+                select.innerHTML = '<option value="">—</option>';
+                project.stages.forEach(s => {
+                    select.innerHTML += `<option value="${s.id}">${s.title}</option>`;
+                });
+
+                document.getElementById('modalStage').classList.remove('hidden');
+            },
+            editStage: function(stageId) {
+                const project = state.projects.find(p => p.id === state.currentProjectId);
+                if(!project) return;
+                const stage = project.stages.find(s => s.id === stageId);
+                if(!stage) return;
+
+                document.getElementById('stageModalTitle').innerText = "Редактировать этап";
+                document.getElementById('stageEditId').value = stage.id;
+                document.getElementById('stageTitleInput').value = stage.title;
+                document.getElementById('stageAssigneeInput').value = stage.assignee || '';
+                document.getElementById('stageDateInput').value = stage.planDate;
+
+                const select = document.getElementById('stageParentInput');
+                select.innerHTML = '<option value="">—</option>';
+                project.stages.filter(s => s.id !== stageId).forEach(s => {
+                    select.innerHTML += `<option value="${s.id}" ${s.id === stage.parentId ? 'selected' : ''}>${s.title}</option>`;
+                });
+
+                document.getElementById('modalStage').classList.remove('hidden');
+            },
+            saveStage: function(e) {
+                e.preventDefault();
+                const project = state.projects.find(p => p.id === state.currentProjectId);
+                if(!project) return;
+
+                const editId = document.getElementById('stageEditId').value;
+                const title = document.getElementById('stageTitleInput').value;
+                const assignee = document.getElementById('stageAssigneeInput').value;
+                const date = document.getElementById('stageDateInput').value;
+                const parentId = document.getElementById('stageParentInput').value || null;
+
+                if(editId) {
+                    const stage = project.stages.find(s => s.id === editId);
+                    if(stage) {
+                        stage.title = title;
+                        stage.assignee = assignee;
+                        stage.planDate = date;
+                        stage.parentId = parentId;
+                    }
+                } else {
+                    project.stages.push({
+                        id: 's_' + Date.now(),
+                        title: title,
+                        assignee: assignee,
+                        planDate: date,
+                        actualDate: date,
+                        parentId: parentId
+                    });
+                }
+
+                saveState();
+                this.closeModals();
+            },
+            deleteStage: function(stageId) {
+                const project = state.projects.find(p => p.id === state.currentProjectId);
+                if(!project) return;
+                project.stages = project.stages.filter(s => s.id !== stageId);
+                saveState();
+            },
+            openCalendarModal: function() {
+                const list = document.getElementById('holidaysList');
+                list.innerHTML = '';
+                state.holidays.sort().forEach(h => {
+                    list.innerHTML += `
+                        <div class="flex justify-between items-center text-xs p-1.5 bg-slate-50 rounded border border-slate-100">
+                            <span>${h}</span>
+                            <button onclick="app.removeHoliday('${h}')" class="text-rose-500 font-bold px-1">&times;</button>
+                        </div>
+                    `;
+                });
+                document.getElementById('modalCalendar').classList.remove('hidden');
+            },
+            addHoliday: function() {
+                const date = document.getElementById('newHolidayInput').value;
+                if(date && !state.holidays.includes(date)) {
+                    state.holidays.push(date);
+                    saveState();
+                    this.openCalendarModal();
+                }
+            },
+            removeHoliday: function(date) {
+                state.holidays = state.holidays.filter(h => h !== date);
+                saveState();
+                this.openCalendarModal();
+            },
+            closeModals: function() {
+                document.getElementById('modalProject').classList.add('hidden');
+                document.getElementById('modalStage').classList.add('hidden');
+                document.getElementById('modalCalendar').classList.add('hidden');
+                document.getElementById('modalDeleteProject').classList.add('hidden');
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => app.init());
+    </script>
+</body>
+</html>
